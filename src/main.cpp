@@ -40,25 +40,21 @@ const byte rightEncB = 9; // D9 reads right encoder's Ch.B
                           // const byte rightVcc = A6;  // A6 serves as Vcc for right encoder
 
 // Initialize encoder pin states
-int state_leftA;
-int state_leftB;
-int state_rightA;
-int state_rightB;
-int prevState_leftA;
-int prevState_leftB;
-int prevState_rightA;
-int prevState_rightB;
-int motorDir = 0; // looking from motor shaft, clockwise: 1, ccw: -1
-int counter_left = 0;
-int counter_right = 0;
+int8_t motorDir = 0; // looking from motor shaft, clockwise: 1, ccw: -1
+uint32_t counter_left = 0;
+uint32_t counter_right = 0;
+float leftCPS = 0.0;
+float rightCPS = 0.0;
 
 void TimerHandler1(void)
 {
+  leftCPS = counter_left * TIMER1_INTERVAL_MS / 1000;
+  rightCPS = counter_right * TIMER1_INTERVAL_MS / 1000;
   if (TIMER_INTERRUPT_DEBUG > 1)
   {
-    Serial.print(counter_left);
+    Serial.print(leftCPS);
     Serial.print(",");
-    Serial.println(counter_right);
+    Serial.println(rightCPS);
   }
   counter_left = 0;
   counter_right = 0;
@@ -66,122 +62,22 @@ void TimerHandler1(void)
 
 void ISR_countLeftEncA(void)
 {
-  motorDir = 0; // clear motor direction
-  prevState_leftA = state_leftA;
-  state_leftA = !state_leftA;
-  if (prevState_leftA == 0)
-  {
-    if (prevState_leftB == 0)
-    {
-      motorDir = 1; // prev states: {0,0}, present states: {1,0}
-    }
-    else
-    {
-      motorDir = -1; // prev states: {0,1}, present states: {1,1}
-    }
-  }
-  else
-  {
-    if (prevState_leftB == 0)
-    {
-      motorDir = -1; // prev states: {1,0}, present states: {0,0}
-    }
-    else
-    {
-      motorDir = 1; // prev states: {1,1}, present states: {0,1}
-    }
-  }
-  counter_left += motorDir;
+  counter_left++;
 }
 
 void ISR_countLeftEncB(void)
 {
-  motorDir = 0;
-  prevState_leftB = state_leftB;
-  state_leftB = !state_leftB;
-  if (prevState_leftA == 0)
-  {
-    if (prevState_leftB == 0)
-    {
-      motorDir = -1; // prev states: {0,0}, present states: {0,1}
-    }
-    else
-    {
-      motorDir = 1; // prev states: {0,1}, present states: {0,0}
-    }
-  }
-  else
-  {
-    if (prevState_leftB == 0)
-    {
-      motorDir = 1; // prev states: {1,0}, present states: {1,1}
-    }
-    else
-    {
-      motorDir = -1; // prev states: {1,1}, present states: {1,0}
-    }
-  }
-  counter_left += motorDir;
+  counter_left++;
 }
 
 void ISR_countRightEncA(void)
 {
-  motorDir = 0;
-  prevState_rightA = state_rightA;
-  state_rightA = !state_rightA;
-  if (prevState_rightA == 0)
-  {
-    if (prevState_rightB == 0)
-    {
-      motorDir = 1; // prev states: {0,0}, present states: {1,0}
-    }
-    else
-    {
-      motorDir = -1; // prev states: {0,1}, present states: {1,1}
-    }
-  }
-  else
-  {
-    if (prevState_rightB == 0)
-    {
-      motorDir = -1; // prev states: {1,0}, present states: {0,0}
-    }
-    else
-    {
-      motorDir = 1; // prev states: {1,1}, present states: {0,1}
-    }
-  }
-  counter_right += motorDir;
+  counter_right++;
 }
 
 void ISR_countRightEncB(void)
 {
-  motorDir = 0;
-  prevState_rightB = state_rightB;
-  state_rightB = !state_rightB;
-  if (prevState_rightA == 0)
-  {
-    if (prevState_rightB == 0)
-    {
-      motorDir = -1; // prev states: {0,0}, present states: {0,1}
-    }
-    else
-    {
-      motorDir = 1; // prev states: {0,1}, present states: {0,0}
-    }
-  }
-  else
-  {
-    if (prevState_rightB == 0)
-    {
-      motorDir = 1; // prev states: {1,0}, present states: {1,1}
-    }
-    else
-    {
-      motorDir = -1; // prev states: {1,1}, present states: {1,0}
-    }
-  }
-  counter_right += motorDir;
+  counter_right++;
 }
 
 void setup()
@@ -193,11 +89,15 @@ void setup()
   pinMode(leftIn2, OUTPUT);
   pinMode(rightIn1, OUTPUT);
   pinMode(rightIn2, OUTPUT);
+  // Set all encoder pins to inputs
+  pinMode(leftEncA, INPUT);
+  pinMode(leftEncB, INPUT);
+  pinMode(rightEncA, INPUT);
+  pinMode(rightEncB, INPUT);
 
   Serial.begin(9600);
   while (!Serial)
     ;
-
   Serial.print(F("\nStarting ISR_RPM_Measure on "));
   Serial.println(BOARD_NAME);
   Serial.println(MEGA_AVR_TIMER_INTERRUPT_VERSION);
@@ -229,15 +129,9 @@ void setup()
   digitalWrite(rightIn2, LOW);
   delay(1000);
 
-  // Initialize encoder pin states
-  int state_leftA = digitalRead(leftEncA);
-  int state_leftB = digitalRead(leftEncB);
-  int state_rightA = digitalRead(rightEncB);
-  int state_rightB = digitalRead(rightEncB);
-  int prevState_leftA = state_leftA;
-  int prevState_leftB = state_leftB;
-  int prevState_rightA = state_rightA;
-  int prevState_rightB = state_rightB;
+  // Initialize counter
+  counter_left = 0;
+  counter_right = 0;
 }
 
 void loop()
@@ -248,7 +142,7 @@ void loop()
   digitalWrite(rightIn1, LOW);
   digitalWrite(rightIn2, HIGH);
 
-  analogWrite(leftPWM, 150);
-  analogWrite(rightPWM, 150);
+  analogWrite(leftPWM, 200);
+  analogWrite(rightPWM, 200);
   delay(10);
 }
