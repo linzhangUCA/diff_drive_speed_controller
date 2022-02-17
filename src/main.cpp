@@ -6,6 +6,7 @@ Speed measuring uses high frequency hardware timer 1Hz == 1ms) to measure the ti
 // _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
 // Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
 #include <Arduino.h>
+#include <math.h>
 
 #define TIMER_INTERRUPT_DEBUG 0
 #define _TIMERINTERRUPT_LOGLEVEL_ 0
@@ -18,7 +19,7 @@ Speed measuring uses high frequency hardware timer 1Hz == 1ms) to measure the ti
 #define USE_TIMER_2 false
 #define USE_TIMER_3 false
 
-#define TIMER1_INTERVAL_MS 100 // 1s = 1000ms
+#define TIMER1_INTERVAL_MS 50 // 1s = 1000ms
 
 #include "TimerInterrupt_Generic.h"
 
@@ -40,51 +41,55 @@ const byte rightEncB = 9; // D9 reads right encoder's Ch.B
 // const byte rightVcc = A6;  // A6 serves as Vcc for right encoder
 
 // Define constans for robot
-const byte COUNT_PER_SECOND = 12;
+const byte COUNTS_PER_REV = 12;
 const float GEAR_RATIO = 210.59;
 const float WHEEL_RADIUS = 0.021; // m
 const float WHEEL_SEPARATION = 0.09; // m
 
-// Initialize encoder pin states
-int8_t motorDir = 0; // looking from motor shaft, clockwise: 1, ccw: -1
-uint32_t counter_left = 0;
-uint32_t counter_right = 0;
+// Define variables
+int8_t leftMotorDir = 0; // forward: 1; backward: -1
+int8_t rightMotorDir = 0; // forward: 1; backward: -1
+int32_t leftCounter = 0;
+int32_t rightCounter = 0;
 float leftCPS = 0.0;
 float rightCPS = 0.0;
+float linear = 0.0; 
+float angular = 0.0; 
 
 void TimerHandler1(void)
 {
-  leftCPS = counter_left * TIMER1_INTERVAL_MS / 1000; // counts per second
-  rightCPS = counter_right * TIMER1_INTERVAL_MS / 1000;
-  // leftRPS = (leftCPS / COUNT_PER_SECOND); // radians per second
+  leftCPS = leftMotorDir * leftCounter * 1000 / TIMER1_INTERVAL_MS; // counts per second
+  rightCPS = rightMotorDir * rightCounter * 1000 / TIMER1_INTERVAL_MS;
+  linear = (leftCPS + rightCPS) / (COUNTS_PER_REV * GEAR_RATIO) * (2 * M_PI) * WHEEL_RADIUS / 2; // meters per second
+  angular = (rightCPS - leftCPS) / (COUNTS_PER_REV * GEAR_RATIO) * (2 * M_PI) * WHEEL_RADIUS / WHEEL_SEPARATION; // radians per second
   if (TIMER_INTERRUPT_DEBUG > 1)
   {
     Serial.print(leftCPS);
     Serial.print(",");
     Serial.println(rightCPS);
   }
-  counter_left = 0;
-  counter_right = 0;
+  leftCounter = 0;
+  rightCounter = 0;
 }
 
 void ISR_countLeftEncA(void)
 {
-  counter_left++;
+  leftCounter++;
 }
 
 void ISR_countLeftEncB(void)
 {
-  counter_left++;
+  leftCounter++;
 }
 
 void ISR_countRightEncA(void)
 {
-  counter_right++;
+  rightCounter++;
 }
 
 void ISR_countRightEncB(void)
 {
-  counter_right++;
+  rightCounter++;
 }
 
 void setup()
@@ -137,26 +142,31 @@ void setup()
   delay(1000);
 
   // Initialize counter
-  counter_left = 0;
-  counter_right = 0;
+  leftCounter = 0;
+  rightCounter = 0;
 
   // Set motor direction
-  digitalWrite(leftIn1, LOW);
-  digitalWrite(leftIn2, HIGH);
+  digitalWrite(leftIn1, HIGH);
+  digitalWrite(leftIn2, LOW);
+  leftMotorDir = -1;
   digitalWrite(rightIn1, LOW);
   digitalWrite(rightIn2, HIGH);
+  rightMotorDir = 1;
 }
 
 void loop()
 {
-  // Set motor directions
-  Serial.print("counts per second: left: ");
-  Serial.print(leftCPS);
-  Serial.print(", right: ");
-  Serial.println(rightCPS);
+  // Print speed
+  // Serial.print("left cps: ");
+  // Serial.print(leftCPS);
+  // Serial.print(", right cps: ");
+  // Serial.println(rightCPS);
+  Serial.print(linear);
+  Serial.print(",");
+  Serial.println(angular);
 
   // Drive motors
-  analogWrite(leftPWM, 127);
-  analogWrite(rightPWM, 127);
+  analogWrite(leftPWM, 100);
+  analogWrite(rightPWM, 100);
   delay(10);
 }
