@@ -8,7 +8,7 @@ Speed measuring uses high frequency hardware timer 1Hz == 1ms) to measure the ti
 #include <Arduino.h>
 #include <math.h>
 
-#define TIMER_INTERRUPT_DEBUG 0
+#define TIMER_INTERRUPT_DEBUG 2
 #define _TIMERINTERRUPT_LOGLEVEL_ 0
 #define USING_16MHZ true // ATMega4809
 #define USING_8MHZ false
@@ -19,7 +19,7 @@ Speed measuring uses high frequency hardware timer 1Hz == 1ms) to measure the ti
 #define USE_TIMER_2 false
 #define USE_TIMER_3 false
 
-#define TIMER1_INTERVAL_MS 10 // 1s = 1000ms
+#define TIMER1_INTERVAL_MS 20 // 1s = 1000ms
 
 #include "TimerInterrupt_Generic.h"
 
@@ -66,9 +66,9 @@ float targAngular = 0.0;
 float targLeftRPS = 0.0;
 float targRightRPS = 0.0;
 float leftError = 0.0;
-byte leftDCycle = 0;
+int16_t leftDCycle = 0;
 int8_t leftDCycleInc = 0;
-byte rightDCyecle = 0;
+int16_t rightDCyecle = 0;
 
 void TimerHandler1(void)
 {
@@ -81,20 +81,45 @@ void TimerHandler1(void)
   angular = (rightRPS - leftRPS) * WHEEL_RADIUS / WHEEL_SEPARATION;
   // linear = (leftCPS + rightCPS) / (COUNTS_PER_REV * GEAR_RATIO) * (2 * M_PI) * WHEEL_RADIUS / 2; // meters per second
   // angular = (rightCPS - leftCPS) / (COUNTS_PER_REV * GEAR_RATIO) * (2 * M_PI) * WHEEL_RADIUS / WHEEL_SEPARATION; // radians per second
+  // PID control
+  targLeftRPS = (targLinear - (targAngular * WHEEL_SEPARATION) / 2) / WHEEL_RADIUS; // radians per second
+  targRightRPS = (targLinear + (targAngular * WHEEL_SEPARATION) / 2) / WHEEL_RADIUS;
+  leftError = targLeftRPS - leftRPS;
+  leftDCycleInc = int(K_p * leftError);
+  leftDCycle += leftDCycleInc;
+  if (leftDCycle > 255)
+  {
+    leftDCycle = 255;
+  }
+  else if (leftDCycle < 0)
+  {
+    leftDCycle = 0;
+  }
+  analogWrite(leftPWM, leftDCycle);
+  
   // Debug
   if (TIMER_INTERRUPT_DEBUG > 1)
   {
-    Serial.print(leftCPS);
-    Serial.print(",");
-    Serial.print(rightCPS);
+    // Serial.print(leftCPS);
+    // Serial.print(",");
+    // Serial.print(rightCPS);
+    // Serial.print(",");
+    // Serial.print(leftRPS);
+    // Serial.print(",");
+    // Serial.print(rightRPS);
+    // Serial.print(",");
+    // Serial.print(linear);
+    // Serial.print(",");
+    // Serial.println(angular);
+    Serial.print(targLeftRPS);
     Serial.print(",");
     Serial.print(leftRPS);
     Serial.print(",");
-    Serial.print(rightRPS);
+    Serial.print(leftError);
     Serial.print(",");
-    Serial.print(linear);
+    Serial.print(leftDCycleInc);
     Serial.print(",");
-    Serial.println(angular);
+    Serial.println(leftDCycle);
   }
   leftCounter = 0;
   rightCounter = 0;
@@ -193,36 +218,16 @@ void setup()
 
 void loop()
 {
-  // PID control
-  targLeftRPS = (targLinear - (targAngular * WHEEL_SEPARATION) / 2) / WHEEL_RADIUS; // radians per second
-  targRightRPS = (targLinear + (targAngular * WHEEL_SEPARATION) / 2) / WHEEL_RADIUS;
-  leftError = targLeftRPS - leftRPS;
-  leftDCycleInc = int(K_p * leftError);
-  leftDCycle += leftDCycleInc;
-  if (leftDCycle > 255)
+  for (int i = 0; i < 40; i+=2)
   {
-    leftDCycle = 255;
+    targLinear = float(i) / 100;
+    delay(1000);
   }
-  else if (leftDCycle < 0)
+  for (int i = 40; i > 0; i-=2)
   {
-    leftDCycle = 0;
+    targLinear = float(i) / 100;
+    delay(1000);
   }
-  analogWrite(leftPWM, leftDCycle);
-  Serial.print(targLeftRPS);
-  Serial.print(",");
-  Serial.println(leftRPS);
-  delay(20);
-
-  // for (int i = 0; i < 10; i++)
-  // {
-  //   targLinear = float(i);
-  //   delay(1000);
-  // }
-  // for (int i = 10; i > 0; i--)
-  // {
-  //   targLinear = float(i);
-  //   delay(1000);
-  // }
   // Print speed
   // Serial.print("left cps: ");
   // Serial.print(leftCPS);
@@ -235,4 +240,6 @@ void loop()
   // Drive motors
   // analogWrite(leftPWM, 100);
   // analogWrite(rightPWM, 100);
+  // delay(20);
+
 }
